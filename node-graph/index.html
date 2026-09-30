@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Layout A · Node Graph</title>
+  <link rel="stylesheet" href="../shared/base.css">
+  <link rel="stylesheet" href="graph.css">
+</head>
+<body data-layout="graph">
+  <header class="topbar">
+    <a class="brand" href="../index.html">🧪 NutriLabel <small>UI Lab</small></a>
+    <span class="tag">Layout A · Node graph</span>
+    <span class="title" id="recipeTitle"></span>
+    <span class="spacer"></span>
+    <button class="btn ghost" id="undo" title="Undo (Ctrl+Z)">↶</button>
+    <button class="btn ghost" id="redo" title="Redo (Ctrl+Y)">↷</button>
+    <button class="btn" id="arrange">⇶ Auto-arrange</button>
+    <button class="btn" id="fit">⤢ Fit <span class="kbd">F</span></button>
+    <button class="btn primary" id="newRecipe">＋ New recipe</button>
+    <button class="btn" id="newVer">⎘ New Version</button>
+    <div id="layoutSwitch"></div>
+  </header>
+  <main class="gmain">
+    <aside class="palette">
+      <div class="pal-block">
+        <div class="pal-h">Building blocks</div>
+        <div class="pal-item asm" draggable="true" data-kind="asm"><span class="pi-ic">⚗︎</span> Sub-assembly <span class="faint">drag</span></div>
+      </div>
+      <div class="pal-block grow">
+        <div class="pal-h">Raw ingredients</div>
+        <input class="txt" id="palSearch" placeholder="Search 70+ ingredients…">
+        <div id="palList" class="pal-list"></div>
+      </div>
+      <div class="pal-help">
+        <b>How to use</b><br>
+        Drag an ingredient onto the canvas, or <b>drop it on an assembly</b> to add it directly.<br>
+        Drag from a node's <b>right dot</b> to an assembly to connect.<br>
+        Click a node to see what feeds it. <span class="kbd">Del</span> removes the selection. Scroll to zoom, drag the background to pan.
+      </div>
+    </aside>
+    <section class="canvas" id="vp">
+      <div class="world" id="world">
+        <svg class="edges" id="edges"></svg>
+        <div id="nodes"></div>
+      </div>
+      <div class="zoombar">
+        <button id="zout">−</button><span class="zl" id="zl">100%</span><button id="zin">+</button>
+      </div>
+    </section>
+    <aside class="inspector" id="insp"></aside>
+  </main>
+  <script src="../shared/data.js"></script>
+  <script src="../shared/engine.js"></script>
+  <script src="graph.js"></script>
+  <script src="../shared/tester.js"></script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Layout C · Recipe Sheets</title>
+  <link rel="stylesheet" href="../shared/base.css">
+  <link rel="stylesheet" href="sheet.css">
+</head>
+<body data-layout="sheet">
+  <header class="topbar">
+    <a class="brand" href="../index.html">🧪 NutriLabel <small>UI Lab</small></a>
+    <span class="tag">Layout C · Recipe sheets</span>
+    <span class="title" id="recipeTitle"></span>
+    <span class="spacer"></span>
+    <button class="btn ghost" id="undo" title="Undo (Ctrl+Z)">↶</button>
+    <button class="btn ghost" id="redo" title="Redo (Ctrl+Y)">↷</button>
+    <div class="seg" id="modeSeg"><button data-mode="edit" class="on">Edit</button><button data-mode="preview">Preview</button></div>
+    <button class="btn" id="rdToggle" title="Show vendors, % of batch, yield loss and nutrition">☑ R&amp;D data</button>
+    <button class="btn" id="arrange">⇶ Arrange</button>
+    <button class="btn" id="fit">⤢ Fit</button>
+    <button class="btn" id="print">🖨 Print</button>
+    <button class="btn primary" id="newRecipe">＋ New recipe</button>
+    <button class="btn" id="newVer">⎘ New Version</button>
+    <div id="layoutSwitch"></div>
+  </header>
+  <main class="smain">
+    <aside class="side">
+      <div class="side-block">
+        <div class="side-h">Sheets in this recipe</div>
+        <div id="tree"></div>
+      </div>
+      <div class="side-block help">
+        <b>How it works</b><br>
+        Each <b>ingredient group</b> sits next to the procedure steps that use it, like a Modernist Cuisine card. <b>Scaling</b> is relative to the 100% base ingredient (click any scaling value to make it the base).<br><br>
+        Sub-recipe rows link to their own sheet with a coloured connector. Drag a sheet by its title bar, scroll to zoom, and drag the background to pan.<br><br>
+        <b>Preview</b> hides the editing controls. <b>Print</b> prints every sheet, one per page.
+      </div>
+    </aside>
+    <section class="canvas" id="vp">
+      <div class="world" id="world">
+        <svg class="links" id="links"></svg>
+        <div id="sheets"></div>
+      </div>
+      <div class="zoombar">
+        <button id="zout">−</button><span class="zl" id="zl">100%</span><button id="zin">+</button>
+      </div>
+    </section>
+  </main>
+  <datalist id="diffList"><option value="easy"><option value="moderate"><option value="advanced"></datalist>
+  <script src="../shared/data.js"></script>
+  <script src="../shared/engine.js"></script>
+  <script src="sheet.js"></script>
+  <script src="../shared/tester.js"></script>
+</body>
+</html>

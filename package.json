@@ -1,0 +1,9 @@
+{
+  "name": "nutrilabel-ui-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Test environment comparing two recipe-builder layouts (node graph vs linked recipe cards).",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
