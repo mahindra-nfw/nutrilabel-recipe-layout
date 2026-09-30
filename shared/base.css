@@ -160,3 +160,16 @@ body.has-tabbar .tester { bottom: 50px; }
 .nl-prompt-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .nl-prompt-btns { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; }
 .muted { color: var(--muted); } .faint { color: var(--faint); }
+.nif { width: 460px; max-height: 90vh; overflow-y: auto; }
+.nif-f { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; flex: 1; min-width: 0; }
+.nif-f span, .nif-n span { font-size: 12px; color: var(--muted); }
+.nif-f input, .nif-f select, .nif-n input { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: var(--panel); color: var(--text); width: 100%; }
+.nif-f input:focus, .nif-f select:focus, .nif-n input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.nif-row { display: flex; gap: 10px; }
+.nif-h { font-weight: 600; margin: 6px 0 8px; }
+.nif-h small { font-weight: 400; color: var(--faint); margin-left: 6px; }
+.nif-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.nif-n { display: flex; flex-direction: column; gap: 3px; }
+.nif-n.sub span { padding-left: 8px; }
+.new-ing-btn { width: 100%; margin: 6px 0; justify-content: center; }
+@media (max-width: 520px) { .nif-row { flex-direction: column; gap: 0; } .nif-grid { grid-template-columns: 1fr 1fr; } }

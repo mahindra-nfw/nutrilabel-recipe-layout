@@ -134,7 +134,7 @@
     const yl = +n.yieldLoss || 0;
     const foot = n.kind === 'final'
       ? `<span>Per portion</span><b>${NL.fmt(c.yielded)} g · ${Math.round(c.perG[0] * c.yielded)} kcal</b>`
-      : `<span>Batch <b>${NL.fmt(c.batch)} g</b>${yl ? ` → ${NL.fmt(c.yielded)} g` : ''}</span><span>${yl ? `−${yl}% loss` : 'no loss'}</span>`;
+      : `<span>Batch <b>${NL.fmt(c.batch)} g</b>${yl ? ` → ${NL.fmt(c.yielded)} g` : ''}</span><span>${yl ? `−${yl}% loss · ${NL.yieldPct(yl)}% yield` : 'no loss'}</span>`;
     return `<div class="gnode ${cls}" data-id="${n.id}" style="${pos}">
       <div class="ghead" data-drag><span class="gic">${n.kind === 'final' ? '★' : '⚗︎'}</span>
         <span class="gtitle" title="${NL.esc(n.name)}">${NL.esc(n.name)}</span><span class="gkind">${n.kind === 'final' ? 'Final' : 'Sub-assembly'}</span></div>
@@ -189,6 +189,7 @@
     insp.innerHTML = (n.kind === 'final' && !ins.length ? GUIDE : '') + `<div class="in-kicker">${n.kind === 'final' ? 'Final product (per portion)' : 'Sub-assembly'}</div>
       <input class="txt in-title" data-fk="name" data-field="name" value="${NL.esc(n.name)}">
       <div class="in-row"><label>Yield loss</label><input class="num" inputmode="decimal" data-fk="yl" data-field="yieldLoss" value="${n.yieldLoss || 0}"> %</div>
+      <div class="in-row"><label>Yield</label><input class="num" inputmode="decimal" data-fk="yp" data-field="yieldPct" value="${NL.yieldPct(n.yieldLoss)}"> % <span class="faint">= 100 − loss</span></div>
       <div class="in-grid"><span>Batch weight</span><b>${NL.fmt(c.batch)} g</b><span>After yield loss</span><b>${NL.fmt(c.yielded)} g</b>
         <span>Calories</span><b>${Math.round(c.perG[0] * 100)} kcal / 100 g</b></div>
       <div class="in-sec">Inputs</div>
@@ -315,7 +316,8 @@
     if (t.dataset.amt) { const ed = S.edges.find(x => x.id === t.dataset.amt); if (ed) { ed.amount = t.value === '' ? 0 : +t.value || 0; renderKeep(); } }
     else if (t.dataset.field && sel?.t === 'node') {
       const n = node(sel.id); const f = t.dataset.field;
-      n[f] = f === 'yieldLoss' ? (+t.value || 0) : t.value;
+      if (f === 'yieldPct') { if (t.value !== '') n.yieldLoss = NL.lossFromYield(t.value); }
+      else n[f] = f === 'yieldLoss' ? (+t.value || 0) : t.value;
       renderKeep();
     }
   });
@@ -390,18 +392,17 @@
   $('#zin').onclick = () => vp.zoom(1.2);
   $('#zout').onclick = () => vp.zoom(1 / 1.2);
   $('#newVer').onclick = async () => {
-    const v = await NL.prompt('Version name:', nameOf(S) + ' v' + (wb.count() + 1));
+    const v = await NL.prompt('Version name (shown on the tab):', nameOf(S) + ' v' + (wb.count() + 1));
     if (!v) return;
-    const clone = JSON.parse(JSON.stringify(S));
-    setName(clone, v);
-    wb.add(clone);
+    wb.add(JSON.parse(JSON.stringify(S)), v);
     NL.toast('Version "' + v + '" created');
   };
   $('#newRecipe').onclick = () => newRecipe();
+  $('#newIng').onclick = async () => { const i = await NL.ingredientForm(); if (i) NL.toast(`"${i.name}" added. Drag it from the list.`); };
+  document.addEventListener('nl:ingredients', drawPalette);
 
   // ---------- recipes as tabs (workbook) ----------
   const nameOf = st => st.nodes.find(n => n.kind === 'final')?.name;
-  const setName = (st, v) => { st.nodes.find(n => n.kind === 'final').name = v; };
   const blank = () => ({ nodes: [{ id: 'final', kind: 'final', name: 'Untitled recipe ' + (wb.count() + 1), yieldLoss: 0, notes: '', x: 0, y: 0 }], edges: [] });
   function newRecipe() { wb.add(blank()); }
   window.NL_resetSample = () => {
@@ -426,11 +427,10 @@
   const wb = NL.workbook({
     key: 'nl_graph_book_v1', legacyKey: LS,
     sample: () => fromModel(NL.SAMPLE),
-    nameOf, setName,
+    nameOf,
     beforeSwitch: () => { clearTimeout(typingT); commit(); },
     onSwitch: openState,
     onNew: newRecipe,
-    onRename: v => { setName(S, v); render(); commit(); },
   });
   drawPalette();
   openState(wb.current());

@@ -3,7 +3,57 @@
 // numbers are identical and only the interface differs.
 window.NL = window.NL || {};
 
+NL.CUSTOM_KEY = 'nl_custom_ingredients_v1';
+NL.CUSTOM_CAT = 'My Ingredients';
+NL.CAT_COLORS[NL.CUSTOM_CAT] = '#0ea5e9';
+try { (JSON.parse(localStorage.getItem(NL.CUSTOM_KEY)) || []).forEach(i => NL.INGREDIENTS.push(i)); } catch { }
 NL.ingMap = Object.fromEntries(NL.INGREDIENTS.map(i => [i.id, i]));
+NL.refreshCategories = () => { NL.CATEGORIES = [...new Set([...NL.INGREDIENTS.map(i => i.cat), NL.CUSTOM_CAT])]; };
+NL.refreshCategories();
+NL.addIngredient = function (ing) {
+  NL.INGREDIENTS.push(ing); NL.ingMap[ing.id] = ing; NL.refreshCategories();
+  try {
+    const list = JSON.parse(localStorage.getItem(NL.CUSTOM_KEY)) || [];
+    list.push(ing); localStorage.setItem(NL.CUSTOM_KEY, JSON.stringify(list));
+  } catch { }
+  document.dispatchEvent(new CustomEvent('nl:ingredients'));
+  return ing;
+};
+
+// Modal form for a new raw ingredient (nutrition per 100 g). Resolves to the ingredient or null.
+NL.ingredientForm = function (initialName = '') {
+  return new Promise(resolve => {
+    const ov = document.createElement('div'); ov.className = 'nl-prompt-ov';
+    const cats = NL.CATEGORIES.map(c => `<option ${c === NL.CUSTOM_CAT ? 'selected' : ''}>${NL.esc(c)}</option>`).join('');
+    const nut = NL.NUTRIENTS.map((n, k) => `<label class="nif-n${n.sub ? ' sub' : ''}"><span>${NL.esc(n.label)}${n.unit ? ` (${n.unit})` : ' (kcal)'}</span>
+      <input type="number" min="0" step="any" data-n="${k}" placeholder="0"></label>`).join('');
+    ov.innerHTML = `<form class="nl-prompt nif">
+      <div class="nl-prompt-label">New ingredient</div>
+      <label class="nif-f"><span>Name</span><input name="name" required value="${NL.esc(initialName)}" placeholder="e.g. Yuzu Kosho"></label>
+      <div class="nif-row">
+        <label class="nif-f"><span>Category</span><select name="cat">${cats}</select></label>
+        <label class="nif-f"><span>Vendor (optional)</span><input name="vendor" placeholder="e.g. Sysco"></label>
+      </div>
+      <div class="nif-h">Nutrition per 100 g <small>blank = 0</small></div>
+      <div class="nif-grid">${nut}</div>
+      <div class="nl-prompt-btns"><button type="submit" class="btn primary">Save ingredient</button><button type="button" class="btn ghost nl-prompt-cancel">Cancel</button></div>
+    </form>`;
+    document.body.appendChild(ov);
+    const f = ov.querySelector('form'), nameIn = f.elements.name;
+    nameIn.focus(); nameIn.select();
+    const done = v => { ov.remove(); resolve(v); };
+    f.onsubmit = e => {
+      e.preventDefault();
+      const name = nameIn.value.trim(); if (!name) return nameIn.focus();
+      if (NL.INGREDIENTS.some(i => i.name.toLowerCase() === name.toLowerCase()) && !confirm(`An ingredient called "${name}" already exists. Create another one anyway?`)) return;
+      const n = NL.NUTRIENTS.map((_, k) => Math.max(0, parseFloat(f.querySelector(`[data-n="${k}"]`).value) || 0));
+      done(NL.addIngredient({ id: NL.uid('c'), name, cat: f.elements.cat.value, vendor: f.elements.vendor.value.trim() || null, n, custom: true }));
+    };
+    ov.querySelector('.nl-prompt-cancel').onclick = () => done(null);
+    ov.addEventListener('pointerdown', e => { if (e.target === ov) done(null); });
+    f.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); done(null); } });
+  });
+};
 NL.NUTRIENTS = [
   { k: 'kcal', label: 'Calories', unit: '' },
   { k: 'fat', label: 'Total Fat', unit: 'g', dv: 78 },
@@ -114,7 +164,8 @@ NL.picker = function ({ x, y, groups, placeholder = 'Search ingredients…', onP
     const q = input.value.trim().toLowerCase();
     flat = []; let html = '';
     // while searching, pinned actions ("always") move to the end so Enter picks the best match
-    const ordered = q ? [...groups.filter(g => !g.items.some(i => i.always)), ...groups.filter(g => g.items.some(i => i.always))] : groups;
+    const pinned = groups.filter(g => g.items.some(i => i.always)).sort((a, b) => b.items.some(i => i.value === 'new-ing') - a.items.some(i => i.value === 'new-ing'));
+    const ordered = q ? [...groups.filter(g => !g.items.some(i => i.always)), ...pinned] : groups;
     for (const g of ordered) {
       const items = g.items.filter(i => !q || i.label.toLowerCase().includes(q) || (i.sub || '').toLowerCase().includes(q) || i.always);
       if (!items.length) continue;
@@ -129,7 +180,13 @@ NL.picker = function ({ x, y, groups, placeholder = 'Search ingredients…', onP
     list.innerHTML = html || '<div class="pk-empty">No matches</div>';
     list.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
   }
-  function pick(i) { const it = flat[i]; if (!it) return; NL.closePicker(); onPick(it.value, it); }
+  function pick(i) {
+    const it = flat[i]; if (!it) return;
+    const typed = input.value.trim();
+    NL.closePicker();
+    if (it.value === 'new-ing') NL.ingredientForm(typed).then(ing => { if (ing) { NL.toast(`"${ing.name}" added to your ingredients`); onPick('ing:' + ing.id, it); } });
+    else onPick(it.value, it);
+  }
   input.addEventListener('input', () => { active = 0; draw(); });
   input.addEventListener('keydown', e => {
     if (e.key === 'ArrowDown') { active = Math.min(active + 1, flat.length - 1); draw(); e.preventDefault(); }
@@ -162,10 +219,10 @@ NL.closePicker = function () {
   NL._pickerOutside = NL._pickerEsc = null;
 };
 NL.ingredientGroups = function () {
-  return NL.CATEGORIES.map(cat => ({
+  return [{ label: 'New', items: [{ value: 'new-ing', label: '＋ Create new ingredient', color: NL.CAT_COLORS[NL.CUSTOM_CAT], always: true }] }, ...NL.CATEGORIES.map(cat => ({
     label: cat,
-    items: NL.INGREDIENTS.filter(i => i.cat === cat).map(i => ({ value: 'ing:' + i.id, label: i.name, sub: i.vendor || '', color: NL.CAT_COLORS[cat] })),
-  }));
+    items: NL.INGREDIENTS.filter(i => i.cat === cat).map(i => ({ value: 'ing:' + i.id, label: i.name, sub: i.vendor || (i.custom ? 'custom' : ''), color: NL.CAT_COLORS[cat] || '#94a3b8' })),
+  })).filter(g => g.items.length)];
 };
 
 // Pan / zoom canvas. `world` is transformed; background dots follow the transform.
@@ -238,7 +295,8 @@ NL.history = function (save, get, set) {
 };
 
 // Excel-style workbook: one recipe per tab, tab bar pinned to the bottom of the page.
-// opts: key, legacyKey, sample(), nameOf(state), setName(state, name), onSwitch(state), onNew(), onRename(name), beforeSwitch()
+// opts: key, legacyKey, sample(), nameOf(state), onSwitch(state), onNew(), beforeSwitch()
+// A tab shows its own `title` once renamed; until then it follows the recipe name.
 NL.workbook = function (o) {
   const clone = x => JSON.parse(JSON.stringify(x));
   let book = NL.load(o.key);
@@ -250,7 +308,7 @@ NL.workbook = function (o) {
   let live = null, renaming = null, dragId = null;
   const tab = id => book.tabs.find(t => t.id === id);
   const persist = () => { try { localStorage.setItem(o.key, JSON.stringify(book)); } catch { } };
-  const name = t => o.nameOf(t.id === book.active && live ? live : t.state) || 'Untitled';
+  const name = t => t.title || o.nameOf(t.id === book.active && live ? live : t.state) || 'Untitled';
 
   const bar = document.createElement('div');
   bar.className = 'tabbar';
@@ -271,9 +329,10 @@ NL.workbook = function (o) {
     book.active = id; live = null; persist(); draw();
     o.onSwitch(tab(id).state);
   }
-  function add(state) {
+  function add(state, title) {
     o.beforeSwitch && o.beforeSwitch();
     const t = { id: NL.uid('t'), state };
+    if (title) t.title = title;
     book.tabs.splice(book.tabs.findIndex(x => x.id === book.active) + 1, 0, t);
     book.active = t.id; live = null; persist(); draw();
     o.onSwitch(state);
@@ -288,7 +347,7 @@ NL.workbook = function (o) {
   }
   function duplicate(id) {
     o.beforeSwitch && o.beforeSwitch();
-    const s = clone(tab(id).state); o.setName(s, name(tab(id)) + ' (copy)'); add(s);
+    add(clone(tab(id).state), name(tab(id)) + ' (copy)');
   }
   function rename(id) {
     switchTo(id);
@@ -300,7 +359,7 @@ NL.workbook = function (o) {
     const finish = ok => {
       if (done) return; done = true; renaming = null;
       const v = inp.value.trim();
-      if (ok && v) o.onRename(v); else draw();
+      if (ok && v) { tab(id).title = v; persist(); } draw();
     };
     inp.onkeydown = e => { if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); e.stopPropagation(); };
     inp.onblur = () => finish(true);
@@ -343,7 +402,7 @@ NL.workbook = function (o) {
   return {
     current: () => tab(book.active).state,
     save(state) { tab(book.active).state = state; live = null; persist(); draw(); },
-    live(state) { live = state; const el = bar.querySelector('.tb-tab.active .tb-name'); if (el && !renaming) el.textContent = o.nameOf(state); },
+    live(state) { live = state; const el = bar.querySelector('.tb-tab.active .tb-name'); if (el && !renaming && !tab(book.active).title) el.textContent = o.nameOf(state); },
     add,
     count: () => book.tabs.length,
     names: () => book.tabs.map(name),
@@ -351,14 +410,18 @@ NL.workbook = function (o) {
 };
 NL.load = function (key) { try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : null; } catch { return null; } };
 
+// Yield % is the complement of yield loss %; only yieldLoss is stored.
+NL.yieldPct = loss => +(100 - (+loss || 0)).toFixed(2);
+NL.lossFromYield = v => +(100 - Math.min(Math.max(+v || 0, 0), 100)).toFixed(2);
+
 // Re-render while keeping the focused input focused (elements carry data-fk keys).
 NL.keepFocus = function (fn) {
-  const a = document.activeElement, fk = a?.dataset?.fk;
+  const a = document.activeElement, fk = a?.dataset?.fk, typed = a?.value;
   let s = null, e = null; try { s = a.selectionStart; e = a.selectionEnd; } catch { }
   fn();
   if (!fk) return;
   const n = document.querySelector(`[data-fk="${CSS.escape(fk)}"]`);
-  if (n) { n.focus(); try { if (s != null) n.setSelectionRange(s, e); } catch { } }
+  if (n) { if (typed != null && 'value' in n) n.value = typed; n.focus(); try { if (s != null) n.setSelectionRange(s, e); } catch { } }
 };
 
 NL.toast = function (msg) {
@@ -366,6 +429,29 @@ NL.toast = function (msg) {
   if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); }
   t.textContent = msg; t.classList.add('show');
   clearTimeout(NL._toastT); NL._toastT = setTimeout(() => t.classList.remove('show'), 1800);
+};
+
+// Drag a wire from a card's port onto another card. Calls onDrop(targetEl) if released over one.
+NL.connectDrag = function ({ e, vp, linksEl, from, color, targetSel, selfEl, onDrop }) {
+  e.preventDefault(); e.stopPropagation();
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('class', 'link link-temp'); path.setAttribute('stroke', color);
+  linksEl.appendChild(path);
+  let target = null;
+  const mv = ev => {
+    const p = vp.toWorld(ev.clientX, ev.clientY), dx = Math.max(60, Math.abs(p.x - from.x) / 2);
+    path.setAttribute('d', `M${from.x},${from.y} C${from.x - dx},${from.y} ${p.x + dx},${p.y} ${p.x},${p.y}`);
+    const t = document.elementFromPoint(ev.clientX, ev.clientY)?.closest(targetSel);
+    const next = t && t !== selfEl ? t : null;
+    if (next !== target) { target?.classList.remove('drop'); next?.classList.add('drop'); target = next; }
+  };
+  const up = () => {
+    removeEventListener('pointermove', mv); removeEventListener('pointerup', up);
+    path.remove(); target?.classList.remove('drop');
+    if (target) onDrop(target); else NL.toast('Drop the handle onto the recipe card that uses it');
+  };
+  addEventListener('pointermove', mv); addEventListener('pointerup', up);
+  mv(e);
 };
 
 NL.prompt = function (label, defaultVal) {

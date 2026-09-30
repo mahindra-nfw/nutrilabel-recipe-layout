@@ -87,3 +87,11 @@ tr:hover .rc-del { visibility: visible; } .rc-del:hover { color: var(--danger); 
 .rc-collapsed .rc-body { display: none; }
 .rc-sec.guide { background: #fffbea; font-size: 12.5px; }
 .guide ol { margin: 6px 0 0; padding-left: 18px; } .guide li { margin: 4px 0; }
+
+.port { position: absolute; left: -9px; top: 21px; width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 3px solid var(--c); cursor: crosshair; z-index: 2; box-shadow: var(--shadow); transition: transform .12s; }
+.port:hover { transform: scale(1.25); }
+.rcard.orphan { border-style: dashed; border-top-style: solid; }
+.rcard.orphan .port { animation: portpulse 1.6s ease-in-out infinite; }
+@keyframes portpulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--c) 25%, transparent); } }
+.link-temp { stroke-dasharray: 6 5; opacity: 1; }
+.rc-yp { margin-left: 14px; }

@@ -128,7 +128,8 @@
     }).join('');
 
     const per100 = i => c.perG[i] * 100;
-    return `<div class="sheet" data-id="${id}" style="left:${r.x}px;top:${r.y}px;--sc:${colorOf(id)}">
+    return `<div class="sheet ${!isRoot && !parents.length ? 'orphan' : ''}" data-id="${id}" style="left:${r.x}px;top:${r.y}px;--sc:${colorOf(id)}">
+      ${isRoot ? '' : `<span class="port edit-only" data-port="${id}" title="Drag onto the recipe that uses this sheet"></span>`}
       <div class="s-head" data-drag>
         <span class="s-kicker">${isRoot ? 'Final recipe' : 'Sub-recipe'}</span>
         <input class="s-title" data-f="${id}:name" data-fk="${id}-name" value="${NL.esc(r.name)}" ${ro}>
@@ -140,7 +141,7 @@
         ${row('Storage notes', field('storage', 'e.g. keeps 2 weeks refrigerated'), !r.storage)}
         ${row('Level of difficulty', field('difficulty', 'easy / moderate / advanced', 'list="diffList"'), !r.difficulty)}
         ${row('Special requirements', field('special', 'equipment, sub-recipes, optional items'), !r.special)}
-        ${isRoot ? '' : row('Used in', parents.length ? parents.map(p => `<a data-goto="${p.pid}">${NL.esc(R(p.pid).name)}</a> (${NL.fmt(p.amount, 2)} g)`).join(', ') : '<span class="faint">not used in any recipe yet</span>', false)}
+        ${isRoot ? '' : row('Used in', parents.length ? parents.map(p => `<a data-goto="${p.pid}">${NL.esc(R(p.pid).name)}</a> (${NL.fmt(p.amount, 2)} g)`).join(', ') : '<span class="faint">not used in any recipe yet. Drag the ● on the left onto a recipe to link it</span>', false)}
       </div>
       <textarea class="desc ${r.description ? '' : 'empty'}" rows="1" data-f="${id}:description" data-fk="${id}-description" placeholder="Short description, serving ideas, why it works… (optional)" ${ro}>${NL.esc(r.description || '')}</textarea>
       <table class="mc">
@@ -153,7 +154,7 @@
           <div class="rd-h">R&amp;D data</div>
           <div class="rd-grid">
             <div><span>Batch weight</span><b>${fmtW(c.batch)}</b></div>
-            <div><span>Yield loss</span><b><input inputmode="decimal" data-yl="${id}" data-fk="yl-${id}" value="${r.yieldLoss || 0}" ${ro}> %</b></div>
+            <div><span>Yield loss · Yield</span><b><input inputmode="decimal" data-yl="${id}" data-fk="yl-${id}" value="${r.yieldLoss || 0}" ${ro}> % · <input inputmode="decimal" data-yp="${id}" data-fk="yp-${id}" value="${NL.yieldPct(r.yieldLoss)}" ${ro}> %</b></div>
             <div><span>Final yield</span><b>${fmtW(c.yielded)}</b></div>
             <div><span>Energy / 100 g</span><b>${Math.round(per100(0))} kcal</b></div>
             <div><span>Sodium / 100 g</span><b>${Math.round(per100(4))} mg</b></div>
@@ -288,6 +289,25 @@
     setTimeout(() => focusSel(`[data-f="${nid}:name"]`), 330);
     NL.toast(`Name the sub-recipe, then set its weight in "${p.name}"`);
   }
+  function addCard() {
+    const nid = NL.uid('s'), rc = vpEl.getBoundingClientRect(), c = vp.toWorld(rc.left + rc.width / 2, rc.top + rc.height / 3);
+    S.asm[nid] = { ...blankRecipe('New card'), color: nextColor(), x: Math.round(c.x - SHEETW / 2), y: Math.round(c.y - 80) };
+    for (let k = 0; k < 30; k++) {
+      const n = S.asm[nid];
+      const hit = Object.entries(S.asm).find(([id, a]) => id !== nid && Math.abs(a.x - n.x) < SHEETW && n.y < a.y + (sheetEl(id)?.offsetHeight || 600) && n.y + 400 > a.y);
+      if (!hit) break; n.x = hit[1].x + SHEETW + 60;
+    }
+    render(); commit(); goto(nid);
+    setTimeout(() => focusSel(`[data-f="${nid}:name"]`), 330);
+    NL.toast('Card added. Drag its ● onto the recipe that uses it, or add it later with + Ingredient');
+  }
+  function linkCard(child, parent) {
+    const p = R(parent);
+    if (allItems(p).some(it => it.ref === 'asm:' + child)) return NL.toast('Already linked');
+    if (wouldCycle(parent, child)) return NL.toast('That would create a loop');
+    addItem(parent, p.groups.length - 1, 'asm:' + child);
+    NL.toast(`Linked. Set how many grams of "${R(child).name}" go into "${p.name}"`);
+  }
   function deleteRecipe(id) {
     const ps = parentsOf(id);
     if (!confirm(`Delete "${R(id).name}"?${ps.length ? `\nIt will be removed from: ${[...new Set(ps.map(p => R(p.pid).name))].join(', ')}` : ''}`)) return;
@@ -324,6 +344,11 @@
   });
 
   sheetsEl.addEventListener('pointerdown', e => {
+    const port = e.target.closest('[data-port]');
+    if (port && e.button === 0 && mode === 'edit') {
+      const id = port.dataset.port, r = R(id);
+      return NL.connectDrag({ e, vp, linksEl, from: { x: r.x, y: r.y + 26 }, color: colorOf(id), targetSel: '.sheet', selfEl: port.closest('.sheet'), onDrop: t => linkCard(id, t.dataset.id) });
+    }
     const top = e.target.closest('[data-drag]'); if (!top || e.button !== 0) return;
     if (e.target.closest('input,button,textarea,a')) return;
     e.preventDefault();
@@ -339,7 +364,7 @@
     addEventListener('pointermove', mv); addEventListener('pointerup', up);
   });
 
-  const isField = d => d && (d.f || d.amt || d.vol || d.step || d.yl);
+  const isField = d => d && (d.f || d.amt || d.vol || d.step || d.yl || d.yp);
   let typingT;
   document.addEventListener('input', e => {
     const d = e.target.dataset; if (!isField(d)) return;
@@ -351,12 +376,13 @@
     else if (d.vol) { const { r, gi, ii } = parseKey(d.vol); r.groups[gi].items[ii].volume = e.target.value; }
     else if (d.step) { const { r, gi, ii } = parseKey(d.step); r.groups[gi].steps[ii] = e.target.value; drawLinks(); }
     else if (d.yl) { R(d.yl).yieldLoss = +e.target.value || 0; renderKeep(); }
+    else if (d.yp) { if (e.target.value !== '') { R(d.yp).yieldLoss = NL.lossFromYield(e.target.value); renderKeep(); } }
     clearTimeout(typingT); typingT = setTimeout(commit, 600);
   });
   document.addEventListener('focusout', e => { if (isField(e.target.dataset)) commit(); });
   document.addEventListener('keydown', e => {
     const d = e.target.dataset;
-    if (e.key === 'Enter' && d && (d.amt || d.yl || d.f && e.target.tagName === 'INPUT' || d.vol)) e.target.blur();
+    if (e.key === 'Enter' && d && (d.amt || d.yl || d.yp || d.f && e.target.tagName === 'INPUT' || d.vol)) e.target.blur();
     if (e.key === 'Enter' && d?.step && !e.shiftKey) {
       e.preventDefault();
       const { rid, r, gi, ii } = parseKey(d.step); r.groups[gi].steps.splice(ii + 1, 0, ''); render(); commit();
@@ -408,20 +434,18 @@
   };
   $('#rdToggle').onclick = () => { rd = !rd; $('#rdToggle').textContent = (rd ? '☑' : '☐') + ' R&D data'; $('#rdToggle').classList.toggle('off', !rd); render(); };
   $('#newVer').onclick = async () => {
-    const v = await NL.prompt('Version name:', nameOf(S) + ' v' + (wb.count() + 1));
+    const v = await NL.prompt('Version name (shown on the tab):', nameOf(S) + ' v' + (wb.count() + 1));
     if (!v) return;
-    const clone = JSON.parse(JSON.stringify(S));
-    setName(clone, v);
-    wb.add(clone);
+    wb.add(JSON.parse(JSON.stringify(S)), v);
     NL.toast('Version "' + v + '" created');
   };
   $('#newRecipe').onclick = () => newRecipe();
+  $('#addCard').onclick = () => addCard();
   addEventListener('beforeprint', () => { if (mode === 'edit') { document.body.classList.add('preview'); } });
   addEventListener('afterprint', () => { document.body.classList.toggle('preview', mode === 'preview'); });
 
   // ---------- recipes as tabs (workbook) ----------
   const nameOf = st => st.asm[st.root]?.name;
-  const setName = (st, v) => { st.asm[st.root].name = v; };
   const sample = () => {
     const s = JSON.parse(JSON.stringify(SAMPLE));
     Object.entries(s.asm).forEach(([id, r], i) => { r.x = 0; r.y = 0; if (id !== s.root) r.color = COLORS[(i - 1) % COLORS.length]; });
@@ -446,11 +470,10 @@
   // ---------- boot ----------
   const wb = NL.workbook({
     key: 'nl_sheet_book_v1',
-    sample, nameOf, setName,
+    sample, nameOf,
     beforeSwitch: () => { clearTimeout(typingT); commit(); },
     onSwitch: openState,
     onNew: newRecipe,
-    onRename: v => { setName(S, v); render(); commit(); },
   });
   openState(wb.current());
 })();

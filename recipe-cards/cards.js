@@ -43,7 +43,7 @@
     const parents = parentsOf(id);
     const kicker = isRoot ? 'Final recipe · per portion'
       : parents.length ? 'Sub-recipe · used in ' + parents.map(p => `<a data-goto="${p.pid}">${NL.esc(A(p.pid).name)}</a> (${p.amount} g)`).join(', ')
-        : 'Sub-recipe · not used yet';
+        : 'Sub-recipe · not used yet. Drag the ● on the left onto a recipe to link it';
     const rows = a.items.map((it, idx) => {
       const sid = subIdOf(it.ref);
       const pct = `<td class="r pc">${NL.pct(+it.amount || 0, c.batch)}</td>`;
@@ -56,7 +56,8 @@
       return `<tr><td>${NL.esc(ing?.name || it.ref)}<span class="rc-vendor">${NL.esc(ing?.vendor || '')}</span></td>${amt}${pct}${del}</tr>`;
     }).join('') || `<tr class="rc-empty"><td colspan="4">No ingredients yet — use the buttons below or drag from the library</td></tr>`;
     const kcal = Math.round(c.perG[0] * (isRoot ? c.yielded : 100));
-    return `<div class="rcard ${isRoot ? 'final' : ''} ${a.collapsed ? 'rc-collapsed' : ''}" data-id="${id}" style="left:${a.x}px;top:${a.y}px;--c:${a.color}">
+    return `<div class="rcard ${isRoot ? 'final' : ''} ${a.collapsed ? 'rc-collapsed' : ''} ${!isRoot && !parents.length ? 'orphan' : ''}" data-id="${id}" style="left:${a.x}px;top:${a.y}px;--c:${a.color}">
+      ${isRoot ? '' : `<span class="port" data-port="${id}" title="Drag onto the recipe that uses this card"></span>`}
       <div class="rc-top" data-drag>
         <div class="rc-kicker">${kicker}</div>
         <div class="rc-titlebar">
@@ -67,7 +68,7 @@
         <div class="rc-stats">
           <div><b>${NL.fmt(c.batch)} g</b><span>${isRoot ? 'Portion' : 'Batch'}</span></div>
           <div><b>${NL.fmt(c.yielded)} g</b><span>Yield</span></div>
-          <div><b>${+a.yieldLoss || 0}%</b><span>Loss</span></div>
+          <div><b>${+a.yieldLoss || 0}% / ${NL.yieldPct(a.yieldLoss)}%</b><span>Loss / Yield</span></div>
           <div><b>${kcal}</b><span>${isRoot ? 'kcal / portion' : 'kcal / 100 g'}</span></div>
         </div>
       </div>
@@ -83,7 +84,7 @@
           <li>Add raw ingredients with <b>+ Ingredient</b>, or drag them from the library onto this card.</li>
           <li>Need a component (a sauce, a broth)? Click <b>＋ New sub-recipe</b>. It opens its own linked card where you add its ingredients.</li>
           <li>Type the weight on each row. Batch, yield, % and nutrition update as you type.</li></ol></div>` : ''}
-        <div class="rc-sec rc-yl">Yield loss <input class="num" inputmode="decimal" data-fk="yl-${id}" data-yl="${id}" value="${a.yieldLoss || 0}"> % <span class="faint">moisture lost in cooking</span></div>
+        <div class="rc-sec rc-yl">Yield loss <input class="num" inputmode="decimal" data-fk="yl-${id}" data-yl="${id}" value="${a.yieldLoss || 0}"> % <span class="rc-yp">Yield <input class="num" inputmode="decimal" data-fk="yp-${id}" data-yp="${id}" value="${NL.yieldPct(a.yieldLoss)}"> %</span></div>
         <div class="rc-sec">
           <div class="rc-h">Procedure <button class="rc-mini" data-addstep="${id}">+ Step</button></div>
           <ol class="rc-steps">${(a.steps || []).map((s, i) => `<li><input data-fk="st-${id}-${i}" data-step="${id}:${i}" value="${NL.esc(s)}" placeholder="Describe this step…"><button class="rc-del" data-delstep="${id}:${i}">×</button></li>`).join('')}</ol>
@@ -216,6 +217,27 @@
     setTimeout(() => { const t = cardsEl.querySelector(`[data-title="${nid}"]`); t?.focus(); t?.select(); }, 330);
     NL.toast('Name the sub-recipe, then set its weight in "' + p.name + '"');
   }
+  function addCard() {
+    const nid = NL.uid('s'), used = new Set(Object.values(S.asm).map(a => a.color));
+    const color = COLORS.find(c => !used.has(c)) || COLORS[Object.keys(S.asm).length % COLORS.length];
+    const r = vpEl.getBoundingClientRect(), c = vp.toWorld(r.left + r.width / 2, r.top + r.height / 3);
+    S.asm[nid] = { name: 'New card', items: [], yieldLoss: 0, steps: [], notes: '', color, x: Math.round(c.x - CARDW / 2), y: Math.round(c.y - 60) };
+    const H = heights();
+    for (let k = 0; k < 30; k++) {
+      const n = S.asm[nid];
+      const hit = Object.entries(S.asm).find(([id, a]) => id !== nid && Math.abs(a.x - n.x) < CARDW && n.y < a.y + (H[id] || 300) && n.y + 300 > a.y);
+      if (!hit) break; n.x = hit[1].x + CARDW + 40;
+    }
+    render(); commit(); goto(nid);
+    setTimeout(() => { const t = cardsEl.querySelector(`[data-title="${nid}"]`); t?.focus(); t?.select(); }, 330);
+    NL.toast('Card added. Drag its ● onto the recipe that uses it, or add it later with + Ingredient');
+  }
+  function linkCard(child, parent) {
+    if (A(parent).items.some(it => it.ref === 'asm:' + child)) return NL.toast('Already linked');
+    if (wouldCycle(parent, child)) return NL.toast('That would create a loop');
+    addItem(parent, 'asm:' + child);
+    NL.toast(`Linked. Set how many grams of "${A(child).name}" go into "${A(parent).name}"`);
+  }
   function deleteCard(id) {
     const ps = parentsOf(id);
     if (!confirm(`Delete "${A(id).name}"?${ps.length ? `\nIt will be removed from: ${ps.map(p => A(p.pid).name).join(', ')}` : ''}`)) return;
@@ -240,6 +262,11 @@
   });
 
   cardsEl.addEventListener('pointerdown', e => {
+    const port = e.target.closest('[data-port]');
+    if (port && e.button === 0) {
+      const id = port.dataset.port, a = A(id);
+      return NL.connectDrag({ e, vp, linksEl, from: { x: a.x, y: a.y + 30 }, color: a.color, targetSel: '.rcard', selfEl: port.closest('.rcard'), onDrop: t => linkCard(id, t.dataset.id) });
+    }
     const top = e.target.closest('[data-drag]'); if (!top || e.button !== 0) return;
     if (e.target.closest('input,button,textarea,a')) return;
     e.preventDefault();
@@ -260,17 +287,18 @@
     if (d.amt) { const [id, i] = d.amt.split(':'); A(id).items[+i].amount = e.target.value === '' ? 0 : +e.target.value || 0; renderKeep(); }
     else if (d.title) { A(d.title).name = e.target.value; renderKeep(); }
     else if (d.yl) { A(d.yl).yieldLoss = +e.target.value || 0; renderKeep(); }
+    else if (d.yp) { if (e.target.value !== '') { A(d.yp).yieldLoss = NL.lossFromYield(e.target.value); renderKeep(); } }
     else if (d.step) { const [id, i] = d.step.split(':'); A(id).steps[+i] = e.target.value; }
     else if (d.notes) { A(d.notes).notes = e.target.value; }
   });
   // inputs are re-rendered while typing, so 'change' never fires: commit shortly after typing stops, and on blur
-  const isField = d => d && (d.amt || d.title || d.yl || d.step || d.notes);
+  const isField = d => d && (d.amt || d.title || d.yl || d.yp || d.step || d.notes);
   let typingT;
   document.addEventListener('input', e => { if (isField(e.target.dataset)) { clearTimeout(typingT); typingT = setTimeout(commit, 600); } });
   document.addEventListener('focusout', e => { if (isField(e.target.dataset)) commit(); });
   document.addEventListener('keydown', e => {
     const d = e.target.dataset;
-    if (e.key === 'Enter' && d && (d.amt || d.title || d.yl)) e.target.blur();
+    if (e.key === 'Enter' && d && (d.amt || d.title || d.yl || d.yp)) e.target.blur();
     if (e.key === 'Enter' && d?.step) { const [id, i] = d.step.split(':'); A(id).steps.splice(+i + 1, 0, ''); render(); commit(); cardsEl.querySelector(`[data-step="${id}:${+i + 1}"]`)?.focus(); }
   });
 
@@ -326,18 +354,18 @@
     drawNut(); setTimeout(drawLinks, 220);
   };
   $('#newVer').onclick = async () => {
-    const v = await NL.prompt('Version name:', nameOf(S) + ' v' + (wb.count() + 1));
+    const v = await NL.prompt('Version name (shown on the tab):', nameOf(S) + ' v' + (wb.count() + 1));
     if (!v) return;
-    const clone = JSON.parse(JSON.stringify(S));
-    setName(clone, v);
-    wb.add(clone);
+    wb.add(JSON.parse(JSON.stringify(S)), v);
     NL.toast('Version "' + v + '" created');
   };
   $('#newRecipe').onclick = () => newRecipe();
+  $('#addCard').onclick = () => addCard();
+  $('#newIng').onclick = async () => { const i = await NL.ingredientForm(); if (i) NL.toast(`"${i.name}" added. Drag it from the list.`); };
+  document.addEventListener('nl:ingredients', drawLib);
 
   // ---------- recipes as tabs (workbook) ----------
   const nameOf = st => st.asm[st.root]?.name;
-  const setName = (st, v) => { st.asm[st.root].name = v; };
   const blank = () => ({ root: 'final', asm: { final: { name: 'Untitled recipe ' + (wb.count() + 1), kind: 'final', items: [], yieldLoss: 0, steps: [], notes: '', color: '#0f766e', x: 0, y: 0 } } });
   const sample = () => Object.assign(fromSample(), { _arrange: true });
   function newRecipe() { wb.add(blank()); }
@@ -358,11 +386,10 @@
   // ---------- boot ----------
   const wb = NL.workbook({
     key: 'nl_cards_book_v1', legacyKey: LS,
-    sample, nameOf, setName,
+    sample, nameOf,
     beforeSwitch: () => { clearTimeout(typingT); commit(); },
     onSwitch: openState,
     onNew: newRecipe,
-    onRename: v => { setName(S, v); render(); commit(); },
   });
   drawLib();
   openState(wb.current());

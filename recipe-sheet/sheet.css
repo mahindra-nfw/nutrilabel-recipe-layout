@@ -122,3 +122,11 @@ body.rd-off .rd-only { display: none !important; }
   .sheet::before { display: none; }
   .sheet input::placeholder, .sheet textarea::placeholder { color: transparent; }
 }
+
+.port { position: absolute; left: -10px; top: 17px; width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 3px solid var(--sc); cursor: crosshair; z-index: 2; box-shadow: 0 1px 4px rgba(0,0,0,.2); transition: transform .12s; }
+.port:hover { transform: scale(1.25); }
+.sheet.orphan { border-style: dashed; }
+.sheet.orphan .port { animation: portpulse 1.6s ease-in-out infinite; }
+@keyframes portpulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--sc) 25%, transparent); } }
+.sheet.drop { box-shadow: 0 0 0 4px color-mix(in srgb, var(--sc) 35%, transparent), 0 8px 24px rgba(0,0,0,.08); }
+.link-temp { stroke-dasharray: 6 5; opacity: 1; }
