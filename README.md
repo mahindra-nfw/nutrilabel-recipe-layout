@@ -2,13 +2,6 @@
 
 This is a test environment for comparing three recipe-builder layouts. All three use the same ingredient library, sample recipe and nutrition engine. Only the interface is different.
 
-| | Layout | URL |
-|---|---|---|
-| Home | Pick a layout | http://localhost:5180/ |
-| A | n8n-style node graph | http://localhost:5180/node-graph/ |
-| B | Linked recipe cards | http://localhost:5180/recipe-cards/ |
-| C | Modernist Cuisine-style recipe sheets with connectors | http://localhost:5180/recipe-sheet/ |
-
 ## Run it (any machine)
 
 You don't need `npm install` or a build step.
